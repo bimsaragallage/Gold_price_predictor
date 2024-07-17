@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import *
@@ -94,7 +95,7 @@ def df_to_X_y(df, window_size):
         y.append(label)
     return np.array(X), np.array(y)
 
-WINDOW_SIZE = 2
+WINDOW_SIZE = 6
 X1, y1 = df_to_X_y(temp_normalized, WINDOW_SIZE)
 print(X1.shape, y1.shape)
 
@@ -107,19 +108,19 @@ print(X_train1.shape, y_train1.shape, X_val1.shape, y_val1.shape, X_test1.shape,
 model1 = Sequential()
 model1.add(InputLayer((WINDOW_SIZE, 1)))
 model1.add(LSTM(30))
-model1.add(Dense(5, activation='relu'))
+model1.add(Dense(60, activation='relu'))
 model1.add(Dropout(0.3))
-model1.add(Dense(5, activation='relu'))
-model1.add(Dense(5, activation='relu'))
+model1.add(Dense(120, activation='relu'))
+model1.add(Dense(30, activation='relu'))
 model1.add(Dense(1,activation='linear'))
 
 
-cp1 = ModelCheckpoint('model1/', save_best_only=True)
+cp1 = ModelCheckpoint('model1/model_checkpoint.keras', save_best_only=True)
 model1.compile(loss=MeanSquaredError(), optimizer=Adam(learning_rate=0.001), metrics=[RootMeanSquaredError()])
 
 model1.fit(X_train1, y_train1, validation_data=(X_val1, y_val1), epochs=30,batch_size = 10, callbacks=[cp1])
 
-model1 = load_model('model1/')
+model1 = load_model('model1/model_checkpoint.keras')
 
 train_predictions = scaler.inverse_transform(model1.predict(X_train1).reshape(-1,1)).flatten()
 y_train1 = scaler.inverse_transform(y_train1.reshape(-1,1)).flatten()
@@ -127,7 +128,7 @@ train_results = pd.DataFrame(data={'Train Predictions':train_predictions, 'Actua
 print(train_results)
 
 n_future_predict = 10
-forecasting_dates = pd.date_range(list(train_dates)[-1],periods=n_future_predict,freq='1d').tolist()
+forecasting_dates = pd.date_range(list(train_dates)[1],periods=n_future_predict,freq='1d').tolist()
 
 forecasts = model1.predict(X_train1[-n_future_predict:])
 true_forecasts = scaler.inverse_transform(forecasts.reshape(-1,1)).flatten()
@@ -145,3 +146,21 @@ def job():
 schedule.every().day.at("13:00").do(job)
 
 
+# Plotting the results
+plt.figure(figsize=(14, 7))
+
+# Plot actual values
+plt.plot(train_dates, temp['24 Carat 1 Gram'], label='Actuals')
+
+# Plot train predictions
+plt.plot(train_dates[:len(train_predictions)], train_predictions, label='Train Predictions')
+
+# Plot forecasted values
+forecast_dates = pd.date_range(train_dates.iloc[1], periods=n_future_predict)
+plt.plot(forecast_dates, true_forecasts, label='Forecasts', linestyle='dashed')
+
+plt.xlabel('Date')
+plt.ylabel('24 Carat 1 Gram Price (Rs)')
+plt.title('Gold Price Predictions')
+plt.legend()
+plt.show()
